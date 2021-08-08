@@ -12,7 +12,7 @@ library(Hmisc)
 library(corrplot)
 
 data("iris")
-dat <- as.data.frame(scale(iris[,1:4]))
+dat <- as.data.frame(scale(iris[,1:4])) # assume scaling is known
 true_label <- as.numeric(iris$Species)
 
 type_missing <- "MAR" # use MCAR or MAR
@@ -30,16 +30,17 @@ nr_iter_other <- nr_iter * c_steps
 param_times <- 30 # how often to compute the benchmark
 
 ### for various p
-P <- c(.05,.1,.2,.3,.4,.5,.6,.7)
+P <- c(.05,.1,.2,.3,.4,.5,.7)
 
-results <- list()
 count <- 0
+results_mean_randIndex <- list()
+results_sd_randIndex <- list()
 
-set.seed(124) # for reproducibility
 for (p in P) {
+  
   count <- count + 1
   # create missings for data
-  dat_with_miss <- miss_sim(dat,p,seed_nr=739,type=type_missing)
+  dat_with_miss <- miss_sim(dat,p,type=type_missing, seed_nr = 555+round(p*1000))
   
   png(paste0("Corrplot missings ",type_missing," ",p,".png"))
   mis_ind <- is.na(dat_with_miss)
@@ -47,29 +48,34 @@ for (p in P) {
   dev.off()
   
   ### Benchmark time and calculate rand index
-  rand_ClustImpute <- 0
-  rand_ClustImpute_false <- 0
-  rand_ClustImpute_no_weight <- 0
-  rand_missRanger <- 0
-  rand_RandomImp <- 0
-  rand_mice_pmm <- 0
-  rand_mice_cart <- 0
-  rand_amelia <- 0
-  
+  rand_ClustImpute <- c()
+  rand_ClustImpute_false <- c()
+  rand_ClustImpute_no_weight <- c()
+  rand_missRanger <- c()
+  rand_RandomImp <- c()
+  rand_mice_pmm <- c()
+  rand_mice_cart <- c()
+  rand_amelia <- c()
+
   # Use a different seed each time
-  mbm <- microbenchmark("ClustImpute" = {
+  for (k in 1:param_times) {
+    
+    random_seed = 44444+round(p*1000)+k
+    
+    # ClustImpute
     res <- ClustImpute(dat_with_miss,nr_cluster=nr_cluster, nr_iter=nr_iter, c_steps=c_steps, n_end=n_end, seed_nr = random_seed)
-    rand_ClustImpute <- rand_ClustImpute + external_validation(true_label, res$clusters)
-  },"ClustImpute_assign_with_wf_false" = {
+    rand_ClustImpute <- c(rand_ClustImpute, external_validation(true_label, res$clusters))
+    
+    # ClustImpute: weight function is only applied in the centroid computation, but ignored in the cluster assignment.
     res <- ClustImpute(dat_with_miss,nr_cluster=nr_cluster, nr_iter=nr_iter, c_steps=c_steps, n_end=n_end, seed_nr = random_seed, 
                        assign_with_wf =  FALSE)
-    rand_ClustImpute_false <- rand_ClustImpute_false + external_validation(true_label, res$clusters)
-  },
-  "ClustImpute_no_weight" = {
+    rand_ClustImpute_false <- c(rand_ClustImpute_false, external_validation(true_label, res$clusters))
+    
+    # ClustImpute: No weight function
     res <- ClustImpute(dat_with_miss,nr_cluster=nr_cluster, nr_iter=nr_iter, c_steps=c_steps, n_end=1, seed_nr = random_seed)
-    rand_ClustImpute_no_weight <- rand_ClustImpute_no_weight + external_validation(true_label, res$clusters)
-  },
-  "RandomImp"={
+    rand_ClustImpute_no_weight <- c(rand_ClustImpute_no_weight, external_validation(true_label, res$clusters))
+    
+    # Random Imputation
     dat_random_imp <- dat_with_miss
     for (j in 1:dim(dat)[2]) {
       dat_random_imp[,j] <- impute(dat_random_imp[,j],fun="random")
@@ -77,103 +83,116 @@ for (p in P) {
     cl_RandomImp <- KMeans_arma(data=dat_random_imp,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
     pred_RandomImp <- predict_KMeans(dat_random_imp,cl_RandomImp)
     class(pred_RandomImp) <- "numeric"
-    rand_RandomImp <- rand_RandomImp + external_validation(true_label, pred_RandomImp)
-  },
-  "MissRanger"={
+    rand_RandomImp <- c(rand_RandomImp, external_validation(true_label, pred_RandomImp))
+    
+    # MissRanger
     imp_missRanger <- missRanger(dat_with_miss,pmm.k = 3,verbose = 0)
     cl_missRanger <- KMeans_arma(data=imp_missRanger,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
     pred_missRanger <- predict_KMeans(imp_missRanger,cl_missRanger)
     class(pred_missRanger) <- "numeric"
-    rand_missRanger <- rand_missRanger + external_validation(true_label, pred_missRanger)
-  }, 
-  "MICE_pmm"={
+    rand_missRanger <- c(rand_missRanger, external_validation(true_label, pred_missRanger))
+    
+    # MICE PMM
     dat_mice <- mice(dat_with_miss,m=1,maxit=50,meth='pmm',printFlag=FALSE) # single data set
     dat_mice <- mice::complete(dat_mice)
     if (sum(is.na(dat_mice))==0) {
       cl_mice <- KMeans_arma(data=dat_mice,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
       pred_mice <- predict_KMeans(dat_mice,cl_mice)
       class(pred_mice) <- "numeric"
-      rand_mice_pmm <- rand_mice_pmm + external_validation(true_label, pred_mice)
+      rand_mice_pmm <- c(rand_mice_pmm, external_validation(true_label, pred_mice))
     } else
-      rand_mice_pmm <- NA
-  },
-  "MICE_cart"={
+      rand_mice_pmm <- c(rand_mice_pmm, NA)
+    
+    # MICE CART
     dat_mice <- mice(dat_with_miss,m=1,maxit=50,meth='cart',printFlag=FALSE) # single data set
     dat_mice <- mice::complete(dat_mice)
     if (sum(is.na(dat_mice))==0) {
       cl_mice <- KMeans_arma(data=dat_mice,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
       pred_mice <- predict_KMeans(dat_mice,cl_mice)
       class(pred_mice) <- "numeric"
-      rand_mice_cart <- rand_mice_cart + external_validation(true_label, pred_mice)
+      rand_mice_cart <- c(rand_mice_cart, external_validation(true_label, pred_mice))
     } else
-      rand_mice_cart <- NA
-  }, 
-  "AMELIA"= {
-    if (p<.7) {
-      dat_amelia <- amelia(dat_with_miss,m=1,p2s=0) # single data set
-      dat_amelia <- dat_amelia$imputations$imp1
-      if (sum(is.na(dat_amelia))==0) {
-        cl_amelia <- KMeans_arma(data=dat_amelia,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
-        pred_amelia <- predict_KMeans(dat_amelia,cl_amelia)
-        class(pred_amelia) <- "numeric"
-        rand_amelia <- rand_amelia + external_validation(true_label, pred_amelia)
-      } else
-        rand_amelia = NA
-    } else rand_amelia <- NA
-  }  ,times = param_times,setup = {random_seed=round(runif(1)*1e5)}, unit = "s") # random seed improves performance of ClustImpute
+      rand_mice_cart <- c(rand_mice_cart, NA)
+    
+    # AMELIA
+    dat_amelia <- amelia(dat_with_miss,m=1,p2s=0,empri = p/7 * nrow(dat_with_miss)) # from doc: "a reasonable upper bound is around 10 percent of the rows of the data."
+    dat_amelia <- dat_amelia$imputations$imp1
+    if (sum(is.na(dat_amelia))==0) {
+      cl_amelia <- KMeans_arma(data=dat_amelia,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
+      pred_amelia <- predict_KMeans(dat_amelia,cl_amelia)
+      class(pred_amelia) <- "numeric"
+      rand_amelia <- c(rand_amelia, external_validation(true_label, pred_amelia))
+    } else
+      rand_amelia = c(rand_amelia, NA)
+    
+  }
   
   # compute average rand index
-  rand_ClustImpute <- rand_ClustImpute/param_times
-  rand_ClustImpute_false <- rand_ClustImpute_false/param_times
-  rand_ClustImpute_no_weight <- rand_ClustImpute_no_weight/param_times
-  rand_missRanger <- rand_missRanger/param_times
-  rand_RandomImp <- rand_RandomImp/param_times
-  rand_mice_pmm <- rand_mice_pmm/param_times
-  rand_mice_cart <- rand_mice_cart/param_times
-  rand_amelia <- rand_amelia/param_times
+  na_rm_setting = TRUE
   
-  results$randIndex[[count]] <- c(ClustImpute=rand_ClustImpute,
-                                  ClustImpute_assign_with_wf_false = rand_ClustImpute_false,
-                                  ClustImpute_no_weight=rand_ClustImpute_no_weight,
-                                  RandomImp=rand_RandomImp,
-                                  missRanger=rand_missRanger,
-                                  MICE_pmm=rand_mice_pmm,
-                                  MICE_cart=rand_mice_cart,
-                                  AMELIA=rand_amelia)
-
-  results$benchmark[[count]] <- mbm
+  mean_rand_ClustImpute <- mean(rand_ClustImpute,na.rm = na_rm_setting)
+  mean_rand_ClustImpute_false <- mean(rand_ClustImpute_false,na.rm = na_rm_setting)
+  mean_rand_ClustImpute_no_weight <- mean(rand_ClustImpute_no_weight,na.rm = na_rm_setting)
+  mean_rand_missRanger <- mean(rand_missRanger,na.rm = na_rm_setting)
+  mean_rand_RandomImp <- mean(rand_RandomImp,na.rm = na_rm_setting)
+  mean_rand_mice_pmm <- mean(rand_mice_pmm,na.rm = na_rm_setting)
+  mean_rand_mice_cart <- mean(rand_mice_cart,na.rm = na_rm_setting)
+  mean_rand_amelia <- mean(rand_amelia,na.rm = na_rm_setting)
   
-  mbm_median <- print(mbm)$median
-  results$benchmark_median[[count]] <- mbm_median
+  sd_rand_ClustImpute <- sd(rand_ClustImpute,na.rm = na_rm_setting)
+  sd_rand_ClustImpute_false <- sd(rand_ClustImpute_false,na.rm = na_rm_setting)
+  sd_rand_ClustImpute_no_weight <- sd(rand_ClustImpute_no_weight,na.rm = na_rm_setting)
+  sd_rand_missRanger <- sd(rand_missRanger,na.rm = na_rm_setting)
+  sd_rand_RandomImp <- sd(rand_RandomImp,na.rm = na_rm_setting)
+  sd_rand_mice_pmm <- sd(rand_mice_pmm,na.rm = na_rm_setting)
+  sd_rand_mice_cart <- sd(rand_mice_cart,na.rm = na_rm_setting)
+  sd_rand_amelia <- sd(rand_amelia,na.rm = na_rm_setting)
+  
+  results_mean_randIndex[[count]] <- c(ClustImpute=mean_rand_ClustImpute,
+                                  ClustImpute_assign_with_wf_false = mean_rand_ClustImpute_false,
+                                  ClustImpute_no_weight=mean_rand_ClustImpute_no_weight,
+                                  RandomImp=mean_rand_RandomImp,
+                                  missRanger=mean_rand_missRanger,
+                                  MICE_pmm=mean_rand_mice_pmm,
+                                  MICE_cart=mean_rand_mice_cart,
+                                  AMELIA=mean_rand_amelia)
+  
+  results_sd_randIndex[[count]] <- c(ClustImpute=sd_rand_ClustImpute,
+                                     ClustImpute_assign_with_wf_false = sd_rand_ClustImpute_false,
+                                     ClustImpute_no_weight=sd_rand_ClustImpute_no_weight,
+                                     RandomImp=sd_rand_RandomImp,
+                                     missRanger=sd_rand_missRanger,
+                                     MICE_pmm=sd_rand_mice_pmm,
+                                     MICE_cart=sd_rand_mice_cart,
+                                     AMELIA=sd_rand_amelia) 
 }
 
 ### Rand index
-randtbl <- data.frame(matrix(unlist(results$randIndex),nrow=length(results$randIndex), byrow=T))
-colnames(randtbl) <- names(results$randIndex[[1]])
-randtbl$p <- P
-randtbl
+mean_randtbl <- data.frame(matrix(unlist(results_mean_randIndex),nrow=length(results_mean_randIndex), byrow=T))
+colnames(mean_randtbl) <- names(results_mean_randIndex[[1]])
+mean_randtbl$p <- P
+mean_randtbl
+write.csv(mean_randtbl,paste(type_missing,"-","Mean RandIndices Iris.csv"))
 
-write.csv(randtbl,paste(type_missing,"-","Rand indices iris.csv"))
-
+sd_randtbl <- data.frame(matrix(unlist(results_sd_randIndex),nrow=length(results_sd_randIndex), byrow=T))
+colnames(sd_randtbl) <- names(results_sd_randIndex[[1]])
+sd_randtbl$p <- P
+sd_randtbl
+write.csv(sd_randtbl,paste(type_missing,"-","SD RandIndices Iris.csv"))
 
 ### plot for rand index
-data2plot <- randtbl %>% pivot_longer(-p,names_to = "Algorithm",values_to = "Rand_Index")
-rand_plot <- ggplot(data2plot,aes(x=p,y=Rand_Index,color=Algorithm)) + geom_point() + theme_cowplot() + geom_line() +
+data2plot <- mean_randtbl %>% pivot_longer(-p,names_to = "Algorithm",values_to = "Rand_Index")
+data2plot_sd <- sd_randtbl %>% pivot_longer(-p,names_to = "Algorithm",values_to = "Rand_Index_SD")
+data2plot$Rand_Index_SD <- data2plot_sd$Rand_Index_SD
+
+pd <- position_dodge(width = 0.02)
+rand_plot <- ggplot(data2plot,aes(x=p,y=Rand_Index,color=Algorithm)) + geom_line(size=1) + # + geom_point(size=2)
+  theme_cowplot() +  theme(legend.position="bottom") + 
   xlab("Share of missings") + ylab("Rand Index") + scale_x_continuous(breaks = 1:7/10) + scale_y_continuous(breaks = 0:10/10) + 
-  theme(legend.position="bottom")
+  geom_pointrange(aes(ymin = Rand_Index-2*Rand_Index_SD, ymax = Rand_Index+2*Rand_Index_SD), position = pd, linetype="dotted")
 rand_plot
-save_plot(paste(type_missing,"-","Rand index iris.png"),rand_plot,base_aspect_ratio = 2.5)
-
-
-### Violinplot performance
-violin_plot <- plot_grid(autoplot(results$benchmark[[1]]),autoplot(results$benchmark[[2]]),autoplot(results$benchmark[[3]]),
-                         autoplot(results$benchmark[[4]]),autoplot(results$benchmark[[5]]),autoplot(results$benchmark[[6]]),
-                         autoplot(results$benchmark[[7]]),autoplot(results$benchmark[[8]]),autoplot(results$benchmark[[9]]),
-               ncol=2,labels=sprintf("p = %s",P),label_size = 12,vjust=1)
-violin_plot
-save_plot(paste(type_missing,"-","Violinplot running time iris.png"),violin_plot,base_aspect_ratio = 2.5)
-
 
 # save results
-save(results,rand_plot,violin_plot,file=paste(type_missing,"-","results_benchmarking_iris.Rdata"))
+save_plot(paste(type_missing,"-","Rand index iris.png"),rand_plot,base_aspect_ratio = 2.5)
+save(results,rand_plot,file=paste(type_missing,"-","results_benchmarking_iris.Rdata"))
 

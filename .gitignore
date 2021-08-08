@@ -2,7 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
-Scalability.png
-Violinplot.png
-Rand indices.csv
-results_benchmarking.Rdata
+.csv
+.png
