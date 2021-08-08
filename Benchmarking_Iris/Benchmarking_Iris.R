@@ -35,10 +35,10 @@ P <- c(.05,.1,.2,.3,.4,.5,.6,.7)
 results <- list()
 count <- 0
 
-set.seed(124) # for JSS
+set.seed(124) # for reproducibility
 for (p in P) {
   count <- count + 1
-  # create data with missings
+  # create missings for data
   dat_with_miss <- miss_sim(dat,p,seed_nr=739,type=type_missing)
   
   png(paste0("Corrplot missings ",type_missing," ",p,".png"))
@@ -52,7 +52,8 @@ for (p in P) {
   rand_ClustImpute_no_weight <- 0
   rand_missRanger <- 0
   rand_RandomImp <- 0
-  rand_mice <- 0
+  rand_mice_pmm <- 0
+  rand_mice_cart <- 0
   rand_amelia <- 0
   
   # Use a different seed each time
@@ -85,16 +86,27 @@ for (p in P) {
     class(pred_missRanger) <- "numeric"
     rand_missRanger <- rand_missRanger + external_validation(true_label, pred_missRanger)
   }, 
-  "MICE"={
+  "MICE_pmm"={
     dat_mice <- mice(dat_with_miss,m=1,maxit=50,meth='pmm',printFlag=FALSE) # single data set
     dat_mice <- mice::complete(dat_mice)
     if (sum(is.na(dat_mice))==0) {
       cl_mice <- KMeans_arma(data=dat_mice,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
       pred_mice <- predict_KMeans(dat_mice,cl_mice)
       class(pred_mice) <- "numeric"
-      rand_mice <- rand_mice + external_validation(true_label, pred_mice)
+      rand_mice_pmm <- rand_mice_pmm + external_validation(true_label, pred_mice)
     } else
-      rand_mice <- NA
+      rand_mice_pmm <- NA
+  },
+  "MICE_cart"={
+    dat_mice <- mice(dat_with_miss,m=1,maxit=50,meth='cart',printFlag=FALSE) # single data set
+    dat_mice <- mice::complete(dat_mice)
+    if (sum(is.na(dat_mice))==0) {
+      cl_mice <- KMeans_arma(data=dat_mice,clusters=nr_cluster,n_iter=nr_iter_other,seed=random_seed)
+      pred_mice <- predict_KMeans(dat_mice,cl_mice)
+      class(pred_mice) <- "numeric"
+      rand_mice_cart <- rand_mice_cart + external_validation(true_label, pred_mice)
+    } else
+      rand_mice_cart <- NA
   }, 
   "AMELIA"= {
     if (p<.7) {
@@ -116,14 +128,18 @@ for (p in P) {
   rand_ClustImpute_no_weight <- rand_ClustImpute_no_weight/param_times
   rand_missRanger <- rand_missRanger/param_times
   rand_RandomImp <- rand_RandomImp/param_times
-  rand_mice <- rand_mice/param_times
+  rand_mice_pmm <- rand_mice_pmm/param_times
+  rand_mice_cart <- rand_mice_cart/param_times
   rand_amelia <- rand_amelia/param_times
   
   results$randIndex[[count]] <- c(ClustImpute=rand_ClustImpute,
                                   ClustImpute_assign_with_wf_false = rand_ClustImpute_false,
                                   ClustImpute_no_weight=rand_ClustImpute_no_weight,
                                   RandomImp=rand_RandomImp,
-                                  missRanger=rand_missRanger,MICE=rand_mice,AMELIA=rand_amelia)
+                                  missRanger=rand_missRanger,
+                                  MICE_pmm=rand_mice_pmm,
+                                  MICE_cart=rand_mice_cart,
+                                  AMELIA=rand_amelia)
 
   results$benchmark[[count]] <- mbm
   
