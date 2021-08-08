@@ -193,6 +193,11 @@ rand_plot <- ggplot(data2plot,aes(x=p,y=Rand_Index,color=Algorithm)) + geom_line
 rand_plot
 
 # save results
-save_plot(paste(type_missing,"-","Rand index iris.png"),rand_plot,base_aspect_ratio = 2.5)
-save(results,rand_plot,file=paste(type_missing,"-","results_benchmarking_iris.Rdata"))
+save_plot(paste(type_missing,"-","Rand index iris.png"),rand_plot, base_width = 9, base_height = 5)
+
+# pdf(paste(type_missing,"-","Rand index iris.pdf"),width=10)
+# print(rand_plot)
+# dev.off()
+
+save(data2plot,rand_plot,file=paste(type_missing,"-","results_benchmarking_iris.Rdata"))
 

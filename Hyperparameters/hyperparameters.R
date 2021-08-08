@@ -43,7 +43,6 @@ ClustImpute_params$all_iter <- ClustImpute_params$nr_iter * ClustImpute_params$c
 ### share of missings
 p <- .3
 
-set.seed(124)
 # create data with missings
 dat_with_miss <- miss_sim(dat,p,seed_nr=739,type=type_missing)
 
@@ -57,7 +56,7 @@ for (k in 1:nrow(ClustImpute_params)) {
                        nr_iter=as.integer(ClustImpute_params[1,"nr_iter"]), 
                        c_steps=as.integer(ClustImpute_params[k,"c_steps"]), 
                        n_end=as.integer(ClustImpute_params[k,"n_end"]),
-                       seed_nr = 125+k+runs)
+                       seed_nr = 125+100*k+runs)
     rand_ClustImpute <- rand_ClustImpute + external_validation(true_label, res$clusters)
   }
   ClustImpute_params[k,"value"] <- rand_ClustImpute/nr_runs
@@ -77,7 +76,7 @@ plt_journal <- plt + theme_cowplot() + xlab("Number of iterations: nr_iter") + y
   scale_x_continuous(breaks = unique(ClustImpute_params$nr_iter)) +  labs(color='c_steps') + labs(size="nr_iter * c_steps")
 plt_journal
 
-save_plot("Result hyper parameters.png",plt_journal,base_aspect_ratio = 2.5)
+save_plot("Result hyper parameters.png",plt_journal,base_asp=2.5)
 
 #### Descriptive ####
 
