@@ -15,7 +15,7 @@ data("iris")
 dat <- as.data.frame(scale(iris[,1:4])) # assume scaling is known
 true_label <- as.numeric(iris$Species)
 
-type_missing <- "MAR" # use MCAR or MAR
+type_missing <- "MCAR" # use MCAR or MAR
 
 ### Parameters
 # ClustImpute
