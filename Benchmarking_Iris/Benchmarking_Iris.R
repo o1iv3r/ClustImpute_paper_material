@@ -15,7 +15,7 @@ data("iris")
 dat <- as.data.frame(scale(iris[,1:4])) # assume scaling is known
 true_label <- as.numeric(iris$Species)
 
-type_missing <- "MCAR" # use MCAR or MAR
+type_missing <- "MAR" # use MCAR or MAR
 
 ### Parameters
 # ClustImpute
@@ -31,6 +31,7 @@ param_times <- 30 # how often to compute the benchmark
 
 ### for various p
 P <- c(.05,.1,.2,.3,.4,.5,.7)
+# P <- c(.4)
 
 count <- 0
 results_mean_randIndex <- list()
@@ -42,9 +43,9 @@ for (p in P) {
   # create missings for data
   dat_with_miss <- miss_sim(dat,p,type=type_missing, seed_nr = 555+round(p*1000))
   
-  png(paste0("Corrplot missings ",type_missing," ",p,".png"))
+  png(paste0("Corrplot missings ",type_missing," ",p,".png"), width = 1000, height = 1000, res = 300)
   mis_ind <- is.na(dat_with_miss)
-  corrplot(cor(mis_ind),method="number")
+  corrplot(cor(mis_ind),method="number",col = "black", cl.pos = "n")
   dev.off()
   
   ### Benchmark time and calculate rand index
